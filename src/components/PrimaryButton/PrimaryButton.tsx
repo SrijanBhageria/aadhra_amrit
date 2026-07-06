@@ -11,6 +11,7 @@ interface PrimaryButtonProps {
   onClick?: () => void;
   type?: 'button' | 'submit';
   className?: string;
+  disabled?: boolean;
 }
 
 export default function PrimaryButton({ 
@@ -18,7 +19,8 @@ export default function PrimaryButton({
   href, 
   onClick, 
   type = 'button',
-  className = '' 
+  className = '',
+  disabled = false,
 }: PrimaryButtonProps) {
   const shouldReduceMotion = useReducedMotion();
   const baseClassName = `${styles.button} ${className}`;
@@ -70,8 +72,9 @@ export default function PrimaryButton({
       className={baseClassName}
       variants={buttonVariants}
       initial="rest"
-      whileHover="hover"
-      whileTap="tap"
+      whileHover={disabled ? undefined : 'hover'}
+      whileTap={disabled ? undefined : 'tap'}
+      disabled={disabled}
     >
       {children}
     </MotionButton>

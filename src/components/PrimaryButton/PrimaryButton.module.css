@@ -36,6 +36,15 @@
   opacity: 1;
 }
 
+.button:disabled {
+  opacity: 0.6;
+  cursor: not-allowed;
+}
+
+.button:disabled::before {
+  opacity: 0;
+}
+
 @media (max-width: 640px) {
   .button {
     padding: 1rem 1.75rem;

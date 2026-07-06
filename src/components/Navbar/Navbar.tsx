@@ -24,6 +24,7 @@ export default function Navbar() {
     { href: '/leadership', label: 'Leadership' },
     { href: '/careers', label: 'Careers' },
     { href: '/contact-us', label: 'Contact Us' },
+    { href: '/redeem', label: 'Redeem Coupon' },
   ];
 
   return (
