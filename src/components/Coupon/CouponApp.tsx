@@ -237,7 +237,6 @@ export default function CouponApp() {
                 {flowStep === 'verify' && (
                   <VerifyCouponForm
                     initialCode={couponCode || normalizedUrlCode}
-                    autoVerify={Boolean(normalizedUrlCode && !verifyResult)}
                     onVerified={handleVerified}
                   />
                 )}

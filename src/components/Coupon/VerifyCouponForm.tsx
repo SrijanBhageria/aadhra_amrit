@@ -1,6 +1,6 @@
 'use client';
 
-import { useCallback, useEffect, useState } from 'react';
+import { useCallback, useState } from 'react';
 import PrimaryButton from '@/components/PrimaryButton/PrimaryButton';
 import { verifyCoupon } from '@/lib/coupon/api';
 import type { VerifyCouponData } from '@/lib/coupon/types';
@@ -14,13 +14,11 @@ import styles from './Coupon.module.css';
 interface VerifyCouponFormProps {
   initialCode?: string;
   onVerified: (code: string, result: VerifyCouponData) => void;
-  autoVerify?: boolean;
 }
 
 export default function VerifyCouponForm({
   initialCode = '',
   onVerified,
-  autoVerify = false,
 }: VerifyCouponFormProps) {
   const [code, setCode] = useState(normalizeCode(initialCode));
   const [loading, setLoading] = useState(false);
@@ -48,12 +46,6 @@ export default function VerifyCouponForm({
       setLoading(false);
     }
   }, [onVerified]);
-
-  useEffect(() => {
-    if (autoVerify && initialCode && isValidCodeFormat(normalizeCode(initialCode))) {
-      handleVerify(initialCode);
-    }
-  }, [autoVerify, initialCode, handleVerify]);
 
   const handleSubmit = (e: React.FormEvent) => {
     e.preventDefault();
