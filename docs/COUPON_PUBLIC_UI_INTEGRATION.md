@@ -317,14 +317,15 @@ Amount: ₹60 (₹50 coupon + ₹10 bonus)
 Your reward will be transferred to rajesh@paytm within 2-3 business days.
 ```
 
-**Success screen copy (Phase 3 — Razorpay enabled):**
+**Success screen copy (Phase 3 — Cashfree auto-pay):**
 ```
 ✓ Redemption successful!
 
-₹60 will be transferred to your UPI shortly.
+₹60 will be transferred to your bank account shortly.
 Reference: RED-2026-A1B2
 ```
 
+Prefer **bank** (verified via Surepass) when auto-pay is enabled. UPI-only claims remain pending for manual settlement.
 ---
 
 ## Idempotency (critical for mobile networks)
@@ -424,18 +425,19 @@ Do **not** promise bonus amount on verify screen — bonus is only known after r
 
 ---
 
-## Phase 3 — Razorpay (public UI impact)
+## Phase 3 — Cashfree (public UI impact)
 
-When `COUPON_PAYOUT_ENABLED=true` on backend:
+When auto payout is enabled on the backend:
 
 - Redeem API response is **identical** (`payoutStatus: "pending"`)
-- Payout happens automatically in background
-- Public UI copy can say *"transferred shortly"* instead of *"2-3 business days"*
-- No Razorpay SDK needed on public frontend — all payout is server-side
+- Bank + Surepass verification (`verifyBankAccount` → redeem with `kyc_verification_details`) enables **Cashfree auto-pay**
+- UPI-only redemptions stay `pending` with no auto-pay (`last_payout_error` may be set on the backend)
+- Public UI copy for bank can say *"processed automatically"* / *"shortly"*; UPI should say manual / 2–3 business days
+- No Cashfree SDK needed on public frontend — all payout is server-side
 
-If auto payout fails, customer still sees success (redemption is valid). Ops team handles failed payouts in admin.
+If auto payout fails, customer still sees success (redemption is valid). Ops team handles failed payouts in admin. UI may show a soft “processing delayed / contact support” message when `lastPayoutError` is present while status is still `pending`.
 
-**UPI required for Razorpay:** If only bank details provided and no UPI, Razorpay auto payout may fail — prefer collecting UPI on public form when Phase 3 is active.
+**Bank preferred for Cashfree auto-pay:** Prefer collecting and verifying bank details on the public form when auto settlement is desired. UPI can remain as an optional manual fallback.
 
 ---
 
@@ -996,7 +998,7 @@ HTTP `200`
         "totalAmountPaise": 6000,
         "payoutStatus": "paid",
         "paidAt": "2026-07-04T10:30:00.000Z",
-        "paidVia": "razorpay",
+        "paidVia": "cashfree",
         "redeemedAt": "2026-07-03T15:20:00.000Z"
       },
       {
@@ -1025,7 +1027,7 @@ HTTP `200`
 | `totalAmountPaise` | number | Final amount (base + bonus) |
 | `payoutStatus` | string | `pending` or `paid` |
 | `paidAt` | string \| null | When payout completed (null if pending) |
-| `paidVia` | string \| null | `manual` or `razorpay` (null if pending) |
+| `paidVia` | string \| null | `manual` or `cashfree` (null if pending). Display as “Paid manually” / “Paid via Cashfree”. |
 | `redeemedAt` | string | When coupon was redeemed |
 
 ### UI display
@@ -1131,7 +1133,7 @@ HTTP `200`
     "totalAmountPaise": 6000,
     "payoutStatus": "paid",
     "paidAt": "2026-07-04T10:30:00.000Z",
-    "paidVia": "razorpay",
+    "paidVia": "cashfree",
     "lastPayoutError": null,
     "redeemedAt": "2026-07-03T15:20:00.000Z"
   },
@@ -1184,7 +1186,7 @@ HTTP `200`
 | `pending` | Payment not yet processed | "Payment in progress" |
 | `paid` | Successfully paid | "✓ Paid on {date}" |
 
-**Note:** Failed payouts remain as `pending` with `lastPayoutError` populated. Admin will retry failed payouts.
+**Note:** Failed payouts remain as `pending` with `lastPayoutError` populated. Admin will retry failed payouts. While `payoutStatus === 'pending'`, poll `GET /payoutStatus/:publicRef`. If `lastPayoutError` is present, show a soft “processing delayed / contact support” message instead of a hard error.
 
 ### Error handling
 
@@ -1220,8 +1222,16 @@ HTTP `200`
           : 'Payment in progress'
         }
       </Status>
-      {status.lastPayoutError && (
-        <Error>Issue: {status.lastPayoutError}</Error>
+      {status.lastPayoutError && status.payoutStatus === 'pending' && (
+        <Notice>
+          Processing is taking longer than usual. Your redemption is still valid —
+          contact support with your reference number if it doesn&apos;t arrive soon.
+        </Notice>
+      )}
+      {status.paidVia && status.payoutStatus === 'paid' && (
+        <PaidVia>
+          {status.paidVia === 'cashfree' ? 'Paid via Cashfree' : 'Paid manually'}
+        </PaidVia>
       )}
     </StatusCard>
   )}

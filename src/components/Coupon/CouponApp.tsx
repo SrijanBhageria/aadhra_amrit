@@ -57,7 +57,7 @@ const TABS: { id: RedeemTab; label: string; Icon: LucideIcon }[] = [
 const HERO_FEATURES = [
   { Icon: Shield, text: 'OTP-secured login' },
   { Icon: Zap, text: 'Instant coupon verification' },
-  { Icon: Wallet, text: 'UPI or bank payout' },
+  { Icon: Wallet, text: 'Bank or UPI payout' },
 ] as const;
 
 export default function CouponApp() {

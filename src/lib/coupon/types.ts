@@ -52,6 +52,9 @@ export interface RedeemCouponData {
   message?: string;
 }
 
+/** Known payout channels once paid. Legacy rows may still use `razorpay`. */
+export type PaidVia = 'manual' | 'cashfree' | 'razorpay';
+
 export interface Redemption {
   publicRef: string;
   code: string;
@@ -60,7 +63,7 @@ export interface Redemption {
   totalAmountPaise: number;
   payoutStatus: 'pending' | 'paid';
   paidAt: string | null;
-  paidVia: string | null;
+  paidVia: PaidVia | string | null;
   redeemedAt: string;
 }
 
@@ -88,8 +91,7 @@ export interface PayoutStatusData {
   totalAmountPaise: number;
   payoutStatus: 'pending' | 'paid';
   paidAt: string | null;
-  paidVia: string | null;
-  lastPayoutError: string | null;
+  paidVia: PaidVia | string | null;
   redeemedAt: string;
 }
 

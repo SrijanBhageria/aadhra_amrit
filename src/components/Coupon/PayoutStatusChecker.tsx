@@ -1,12 +1,15 @@
 'use client';
 
-import { useState } from 'react';
+import { useCallback, useEffect, useRef, useState } from 'react';
 import { CircleCheck, Clock } from 'lucide-react';
 import PrimaryButton from '@/components/PrimaryButton/PrimaryButton';
 import { getPayoutStatus } from '@/lib/coupon/api';
+import { formatPaidVia } from '@/lib/coupon/formatPaidVia';
 import type { PayoutStatusData } from '@/lib/coupon/types';
 import { paiseToRupees } from '@/lib/coupon/validation';
 import styles from './Coupon.module.css';
+
+const POLL_INTERVAL_MS = 5000;
 
 function formatDate(iso: string): string {
   return new Date(iso).toLocaleDateString('en-IN', {
@@ -21,10 +24,73 @@ export default function PayoutStatusChecker() {
   const [status, setStatus] = useState<PayoutStatusData | null>(null);
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState('');
+  const [polling, setPolling] = useState(false);
+  const pollRef = useRef<ReturnType<typeof setInterval> | null>(null);
+
+  const stopPolling = useCallback(() => {
+    if (pollRef.current) {
+      clearInterval(pollRef.current);
+      pollRef.current = null;
+    }
+    setPolling(false);
+  }, []);
+
+  const fetchStatus = useCallback(async (ref: string, { silent }: { silent?: boolean } = {}) => {
+    if (!silent) {
+      setLoading(true);
+      setError('');
+    }
+
+    try {
+      const result = await getPayoutStatus(ref);
+      setStatus(result);
+      return result;
+    } catch (err) {
+      if (!silent) {
+        setStatus(null);
+        setError(err instanceof Error ? err.message : 'Failed to check status');
+      }
+      return null;
+    } finally {
+      if (!silent) {
+        setLoading(false);
+      }
+    }
+  }, []);
+
+  useEffect(() => {
+    if (!status || status.payoutStatus !== 'pending') {
+      stopPolling();
+      return;
+    }
+
+    const ref = status.publicRef;
+    setPolling(true);
+    pollRef.current = setInterval(() => {
+      void fetchStatus(ref, { silent: true }).then((result) => {
+        if (result?.payoutStatus === 'paid') {
+          stopPolling();
+        }
+      });
+    }, POLL_INTERVAL_MS);
+
+    return () => {
+      if (pollRef.current) {
+        clearInterval(pollRef.current);
+        pollRef.current = null;
+      }
+    };
+  }, [status?.publicRef, status?.payoutStatus, fetchStatus, stopPolling]);
+
+  useEffect(() => {
+    return () => {
+      stopPolling();
+    };
+  }, [stopPolling]);
 
   const handleCheck = async (e: React.FormEvent) => {
     e.preventDefault();
-    setError('');
+    stopPolling();
     setStatus(null);
 
     const ref = publicRef.trim();
@@ -33,16 +99,12 @@ export default function PayoutStatusChecker() {
       return;
     }
 
-    setLoading(true);
-    try {
-      const result = await getPayoutStatus(ref);
-      setStatus(result);
-    } catch (err) {
-      setError(err instanceof Error ? err.message : 'Failed to check status');
-    } finally {
-      setLoading(false);
-    }
+    await fetchStatus(ref);
   };
+
+  const paidViaLabel = status ? formatPaidVia(status.paidVia) : null;
+  const showDelayedNotice =
+    status?.payoutStatus === 'pending' && Boolean(status.lastPayoutError);
 
   return (
     <div className={styles.panel}>
@@ -85,17 +147,26 @@ export default function PayoutStatusChecker() {
               ) : (
                 <>
                   <Clock size={14} strokeWidth={2} aria-hidden="true" />
-                  Payment in progress
+                  {polling ? 'Payment in progress…' : 'Payment in progress'}
                 </>
               )}
             </span>
           </div>
+          {paidViaLabel && (
+            <div className={styles.detailRow}>
+              <span>Payment</span>
+              <span>{paidViaLabel}</span>
+            </div>
+          )}
           <div className={styles.detailRow}>
             <span>Reference</span>
             <span>{status.publicRef}</span>
           </div>
-          {status.lastPayoutError && (
-            <p className={styles.error}>Issue: {status.lastPayoutError}</p>
+          {showDelayedNotice && (
+            <p className={styles.statusSoftNotice} role="status">
+              Processing is taking longer than usual. Your redemption is still valid — if it
+              doesn&apos;t arrive soon, contact support with your reference number.
+            </p>
           )}
         </div>
       )}

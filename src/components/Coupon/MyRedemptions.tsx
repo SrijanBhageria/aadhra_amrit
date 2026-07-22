@@ -10,6 +10,7 @@ import {
   Ticket,
 } from 'lucide-react';
 import { getMyRedemptions } from '@/lib/coupon/api';
+import { formatPaidVia } from '@/lib/coupon/formatPaidVia';
 import type { MyRedemptionsData, Redemption } from '@/lib/coupon/types';
 import { paiseToRupees } from '@/lib/coupon/validation';
 import styles from './Coupon.module.css';
@@ -43,6 +44,7 @@ function StatusBadge({ status }: { status: Redemption['payoutStatus'] }) {
 
 function RedemptionRow({ item }: { item: Redemption }) {
   const [copied, setCopied] = useState(false);
+  const paidViaLabel = formatPaidVia(item.paidVia);
 
   const copyRef = async () => {
     try {
@@ -81,8 +83,8 @@ function RedemptionRow({ item }: { item: Redemption }) {
         {item.paidAt ? (
           <>
             {formatDate(item.paidAt)}
-            {item.paidVia && (
-              <span className={styles.historyPaidVia}>via {item.paidVia}</span>
+            {paidViaLabel && (
+              <span className={styles.historyPaidVia}>{paidViaLabel}</span>
             )}
           </>
         ) : (
@@ -94,6 +96,8 @@ function RedemptionRow({ item }: { item: Redemption }) {
 }
 
 function RedemptionCard({ item }: { item: Redemption }) {
+  const paidViaLabel = formatPaidVia(item.paidVia);
+
   return (
     <article className={styles.redemptionCard}>
       <div className={styles.redemptionCardTop}>
@@ -122,7 +126,7 @@ function RedemptionCard({ item }: { item: Redemption }) {
             <span>Paid</span>
             <span>
               {formatDate(item.paidAt)}
-              {item.paidVia ? ` via ${item.paidVia}` : ''}
+              {paidViaLabel ? ` · ${paidViaLabel}` : ''}
             </span>
           </div>
         )}

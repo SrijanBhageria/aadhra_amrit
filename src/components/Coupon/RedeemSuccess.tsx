@@ -113,8 +113,17 @@ export default function RedeemSuccess({
             </div>
 
             <p className={styles.successMessage}>
-              Transfer expected within <strong>2–3 business days</strong>. Save your reference
-              number for support.
+              {payout.method === 'bank' ? (
+                <>
+                  Bank payouts are usually processed automatically. Save your reference number for
+                  support.
+                </>
+              ) : (
+                <>
+                  UPI payouts are processed manually and may take <strong>2–3 business days</strong>.
+                  Save your reference number for support.
+                </>
+              )}
             </p>
 
             <div className={styles.successActions}>

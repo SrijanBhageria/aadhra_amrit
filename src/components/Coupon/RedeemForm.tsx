@@ -43,7 +43,7 @@ export default function RedeemForm({
   onBack,
 }: RedeemFormProps) {
   const { phone } = useCouponAuth();
-  const [payoutMethod, setPayoutMethod] = useState<PayoutMethod>('upi');
+  const [payoutMethod, setPayoutMethod] = useState<PayoutMethod>('bank');
   const [name, setName] = useState('');
   const [upiVpa, setUpiVpa] = useState('');
   const [accountNumber, setAccountNumber] = useState('');
@@ -243,8 +243,8 @@ export default function RedeemForm({
             <p className={styles.claimNoticeTitle}>Coupon verified successfully</p>
             <p className={styles.claimNoticeText}>
               {payoutMethod === 'bank'
-                ? 'Enter your bank details and verify the account before claiming. UPI payouts skip bank verification.'
-                : 'Please fill in your details below to claim your reward. Your payout will be transferred to the UPI ID you provide.'}
+                ? 'Bank account is recommended for automatic payout. Enter and verify your account before claiming.'
+                : 'UPI payouts are processed manually and may take longer. For automatic settlement, switch to bank account.'}
             </p>
           </div>
         </div>
@@ -280,17 +280,17 @@ export default function RedeemForm({
             <div className={styles.payoutToggle} role="group" aria-label="Payout method">
               <button
                 type="button"
-                className={`${styles.payoutOption} ${payoutMethod === 'upi' ? styles.payoutOptionActive : ''}`}
-                onClick={() => handlePayoutMethodChange('upi')}
-              >
-                UPI
-              </button>
-              <button
-                type="button"
                 className={`${styles.payoutOption} ${payoutMethod === 'bank' ? styles.payoutOptionActive : ''}`}
                 onClick={() => handlePayoutMethodChange('bank')}
               >
                 Bank account
+              </button>
+              <button
+                type="button"
+                className={`${styles.payoutOption} ${payoutMethod === 'upi' ? styles.payoutOptionActive : ''}`}
+                onClick={() => handlePayoutMethodChange('upi')}
+              >
+                UPI
               </button>
             </div>
           </div>
