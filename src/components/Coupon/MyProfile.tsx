@@ -1,7 +1,7 @@
 'use client';
 
-import { useCallback, useEffect, useState } from 'react';
-import { getMyProfile } from '@/lib/coupon/api';
+import { useEffect, useState } from 'react';
+import { Building2, ShieldCheck } from 'lucide-react';
 import type { MyProfileData } from '@/lib/coupon/types';
 import { formatPhoneDisplay, paiseToRupees } from '@/lib/coupon/validation';
 import { useCouponAuth } from '@/context/CouponAuthContext';
@@ -12,33 +12,27 @@ function formatMonthYear(iso: string): string {
   return new Date(iso).toLocaleDateString('en-IN', { month: 'short', year: 'numeric' });
 }
 
+function formatDate(iso: string): string {
+  return new Date(iso).toLocaleDateString('en-IN', {
+    day: '2-digit',
+    month: 'short',
+    year: 'numeric',
+  });
+}
+
 interface MyProfileProps {
   onLogout: () => void;
 }
 
 export default function MyProfile({ onLogout }: MyProfileProps) {
-  const { phone } = useCouponAuth();
-  const [data, setData] = useState<MyProfileData | null>(null);
-  const [loading, setLoading] = useState(true);
-  const [error, setError] = useState('');
+  const { phone, profile, profileLoading, refreshProfile } = useCouponAuth();
   const [loggingOut, setLoggingOut] = useState(false);
-
-  const load = useCallback(async () => {
-    setLoading(true);
-    setError('');
-    try {
-      const result = await getMyProfile();
-      setData(result);
-    } catch (err) {
-      setError(err instanceof Error ? err.message : 'Failed to load profile');
-    } finally {
-      setLoading(false);
-    }
-  }, []);
+  const [refreshing, setRefreshing] = useState(false);
 
   useEffect(() => {
-    load();
-  }, [load]);
+    setRefreshing(true);
+    void refreshProfile().finally(() => setRefreshing(false));
+  }, [refreshProfile]);
 
   const handleLogout = async () => {
     setLoggingOut(true);
@@ -49,23 +43,14 @@ export default function MyProfile({ onLogout }: MyProfileProps) {
     }
   };
 
-  if (loading) {
+  if ((profileLoading || refreshing) && !profile) {
     return <p className={styles.loading}>Loading profile…</p>;
   }
 
-  if (error) {
-    return (
-      <div className={styles.card}>
-        <p className={styles.error}>{error}</p>
-        <button type="button" className={styles.textButton} onClick={load}>
-          Try again
-        </button>
-      </div>
-    );
-  }
-
-  const displayName = data?.name ?? 'Customer';
+  const data: MyProfileData | null = profile;
+  const displayName = data?.name || 'Customer';
   const displayPhone = data?.phone ?? phone ?? '';
+  const bank = data?.bankDetails;
 
   return (
     <div className={styles.panel}>
@@ -77,7 +62,7 @@ export default function MyProfile({ onLogout }: MyProfileProps) {
         </div>
       </div>
 
-      {data && (
+      {data ? (
         <>
           <div className={styles.statsRow}>
             <div className={styles.statCard}>
@@ -94,12 +79,56 @@ export default function MyProfile({ onLogout }: MyProfileProps) {
             <p className={styles.profileMeta}>UPI: {data.upiVpa}</p>
           )}
 
+          {bank && (
+            <div className={styles.profileBankCard}>
+              <div className={styles.profileBankHeader}>
+                <Building2 size={18} strokeWidth={2} aria-hidden="true" />
+                <span>Bank account</span>
+                {bank.verified && (
+                  <span className={styles.verifiedBadge}>
+                    <ShieldCheck size={12} strokeWidth={2.5} aria-hidden="true" />
+                    Verified
+                  </span>
+                )}
+              </div>
+              <dl className={styles.bankVerifyDetails}>
+                <div>
+                  <dt>Account holder</dt>
+                  <dd>{bank.accountHolderName}</dd>
+                </div>
+                <div>
+                  <dt>Account number</dt>
+                  <dd>{bank.accountNumber}</dd>
+                </div>
+                <div>
+                  <dt>IFSC</dt>
+                  <dd>{bank.ifsc}</dd>
+                </div>
+                {bank.bankName && (
+                  <div>
+                    <dt>Bank</dt>
+                    <dd>{bank.bankName}</dd>
+                  </div>
+                )}
+              </dl>
+              {bank.verified && bank.verifiedAt && (
+                <p className={styles.profileMeta}>
+                  Verified on {formatDate(bank.verifiedAt)}
+                </p>
+              )}
+            </div>
+          )}
+
           {data.firstRedeemedAt && (
             <p className={styles.profileMeta}>
               Member since {formatMonthYear(data.firstRedeemedAt)}
             </p>
           )}
         </>
+      ) : (
+        <p className={styles.profileMeta}>
+          No redemptions yet. Redeem a coupon to save your payout details here.
+        </p>
       )}
 
       <PrimaryButton

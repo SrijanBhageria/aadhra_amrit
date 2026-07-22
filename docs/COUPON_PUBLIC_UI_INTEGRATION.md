@@ -1072,6 +1072,14 @@ HTTP `200`
     "phone": "9876543210",
     "name": "Rajesh Kumar",
     "upiVpa": "rajesh@paytm",
+    "bankDetails": {
+      "accountHolderName": "Rajesh Kumar",
+      "accountNumber": "123456789012",
+      "ifsc": "HDFC0001234",
+      "bankName": "HDFC Bank",
+      "verified": true,
+      "verifiedAt": "2026-07-05T12:00:00.000Z"
+    },
     "totalRedemptions": 3,
     "lifetimeEarnedPaise": 18000,
     "firstRedeemedAt": "2026-01-15T10:00:00.000Z",
@@ -1080,6 +1088,18 @@ HTTP `200`
   "timestamp": "2026-07-05T14:05:00.000Z"
 }
 ```
+
+- `bankDetails` is `null` when no bank fields are saved (UPI-only or first redeem).
+- HTTP `404` when the phone has never redeemed (no `redeemers` row) — treat as empty prefill, not a hard error.
+
+### Prefill + skip-verify (public UI)
+
+After login / session restore, call `myProfile` and prefill redeem:
+
+| Case | UI behavior |
+|---|---|
+| `bankDetails.verified` and account/IFSC unchanged | Show Verified badge; **skip** `verifyBankAccount`; redeem with bank fields and **omit** `kyc_verification_details` |
+| No verified bank, or user edits account/IFSC | Call `verifyBankAccount` → redeem with `kyc_verification_details` |
 
 ### UI display
 
@@ -1092,6 +1112,7 @@ HTTP `200`
     <Stat label="Total redeemed" value={totalRedemptions} />
     <Stat label="Total earned" value={`₹${lifetimeEarnedPaise / 100}`} />
   </Stats>
+  {bankDetails?.verified && <Badge>Verified bank</Badge>}
   <Meta>Member since {format(firstRedeemedAt, 'MMM yyyy')}</Meta>
 </ProfileCard>
 ```

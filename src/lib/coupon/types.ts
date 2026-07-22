@@ -75,10 +75,21 @@ export interface MyRedemptionsData {
   redemptions: Redemption[];
 }
 
+export interface ProfileBankDetails {
+  accountHolderName: string;
+  accountNumber: string;
+  ifsc: string;
+  bankName: string | null;
+  verified: boolean;
+  verifiedAt: string | null;
+}
+
 export interface MyProfileData {
   phone: string;
   name: string;
-  upiVpa: string;
+  upiVpa: string | null;
+  /** Null when no bank is saved (UPI-only or first redeem). */
+  bankDetails: ProfileBankDetails | null;
   totalRedemptions: number;
   lifetimeEarnedPaise: number;
   firstRedeemedAt: string;

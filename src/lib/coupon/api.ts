@@ -303,9 +303,52 @@ export async function getMyRedemptions(): Promise<MyRedemptionsData> {
   return json.data!;
 }
 
-export async function getMyProfile(): Promise<MyProfileData> {
-  const json = await apiCall<MyProfileData>('/myProfile');
-  return json.data!;
+/**
+ * Returns null when the phone has never redeemed (HTTP 404 — no redeemers row).
+ */
+export async function getMyProfile(): Promise<MyProfileData | null> {
+  const headers: Record<string, string> = {
+    'Content-Type': 'application/json',
+    Authorization: `Bearer ${await getAccessToken()}`,
+  };
+
+  let response = await fetch(`${getApiBase()}/myProfile`, {
+    method: 'GET',
+    headers,
+  });
+
+  if (response.status === 401) {
+    const refreshed = await refreshAccessToken();
+    if (!refreshed) {
+      onAuthFailure?.();
+      throw new Error('Session expired — please login again');
+    }
+    headers.Authorization = `Bearer ${await getAccessToken()}`;
+    response = await fetch(`${getApiBase()}/myProfile`, {
+      method: 'GET',
+      headers,
+    });
+  }
+
+  if (response.status === 404) {
+    return null;
+  }
+
+  if (response.status === 429) {
+    throw new Error('Too many attempts. Please wait a minute and try again.');
+  }
+
+  const json = await parseJson<MyProfileData>(response);
+  if (!response.ok || !json.success) {
+    throw new Error(json.error ?? json.message ?? 'Failed to load profile');
+  }
+
+  const data = json.data!;
+  return {
+    ...data,
+    upiVpa: data.upiVpa ?? null,
+    bankDetails: data.bankDetails ?? null,
+  };
 }
 
 export async function getPayoutStatus(publicRef: string): Promise<PayoutStatusData> {

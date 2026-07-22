@@ -1,8 +1,17 @@
 'use client';
 
-import { useState } from 'react';
+import { useEffect, useState } from 'react';
 import { motion } from 'framer-motion';
-import { ArrowLeft, Building2, CheckCircle2, Gift, Info, Loader2, ShieldCheck, Ticket } from 'lucide-react';
+import {
+  ArrowLeft,
+  Building2,
+  CheckCircle2,
+  Gift,
+  Info,
+  Loader2,
+  ShieldCheck,
+  Ticket,
+} from 'lucide-react';
 import PrimaryButton from '@/components/PrimaryButton/PrimaryButton';
 import VerifyCelebration from '@/components/Coupon/VerifyCelebration';
 import {
@@ -36,30 +45,71 @@ interface RedeemFormProps {
 
 type BankVerifyStep = 'enter' | 'review';
 
+function normalizeAccount(value: string): string {
+  return value.replace(/\s/g, '');
+}
+
+function normalizeIfsc(value: string): string {
+  return value.trim().toUpperCase();
+}
+
 export default function RedeemForm({
   code,
   faceValueRupees,
   onSuccess,
   onBack,
 }: RedeemFormProps) {
-  const { phone } = useCouponAuth();
+  const { phone, profile, profileLoading, refreshProfile } = useCouponAuth();
   const [payoutMethod, setPayoutMethod] = useState<PayoutMethod>('bank');
   const [name, setName] = useState('');
   const [upiVpa, setUpiVpa] = useState('');
   const [accountNumber, setAccountNumber] = useState('');
   const [ifsc, setIfsc] = useState('');
   const [bankName, setBankName] = useState('');
+  const [accountHolderName, setAccountHolderName] = useState('');
   const [bankVerifyStep, setBankVerifyStep] = useState<BankVerifyStep>('enter');
   const [bankVerifyResult, setBankVerifyResult] = useState<VerifyBankAccountData | null>(null);
   const [bankConfirmed, setBankConfirmed] = useState(false);
+  /** True when using previously verified bank from myProfile (omit KYC on redeem). */
+  const [reusedVerifiedBank, setReusedVerifiedBank] = useState(false);
+  const [prefilled, setPrefilled] = useState(false);
   const [verifyingBank, setVerifyingBank] = useState(false);
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState('');
 
-  const resetBankVerification = () => {
+  useEffect(() => {
+    if (prefilled || profileLoading) return;
+
+    if (profile) {
+      if (profile.name) setName(profile.name);
+      if (profile.upiVpa) setUpiVpa(profile.upiVpa);
+
+      const bank = profile.bankDetails;
+      if (bank) {
+        setPayoutMethod('bank');
+        setAccountNumber(bank.accountNumber);
+        setIfsc(bank.ifsc);
+        setBankName(bank.bankName ?? '');
+        setAccountHolderName(bank.accountHolderName);
+        if (bank.accountHolderName) {
+          setName(bank.accountHolderName);
+        }
+        if (bank.verified) {
+          setBankVerifyStep('review');
+          setBankConfirmed(true);
+          setReusedVerifiedBank(true);
+        }
+      }
+    }
+
+    setPrefilled(true);
+  }, [profile, profileLoading, prefilled]);
+
+  const clearBankVerification = () => {
     setBankVerifyStep('enter');
     setBankVerifyResult(null);
     setBankConfirmed(false);
+    setReusedVerifiedBank(false);
     setError('');
   };
 
@@ -67,7 +117,20 @@ export default function RedeemForm({
     setPayoutMethod(method);
     setError('');
     if (method === 'upi') {
-      resetBankVerification();
+      clearBankVerification();
+    } else if (
+      profile?.bankDetails?.verified &&
+      normalizeAccount(accountNumber) === normalizeAccount(profile.bankDetails.accountNumber) &&
+      normalizeIfsc(ifsc) === normalizeIfsc(profile.bankDetails.ifsc)
+    ) {
+      setAccountHolderName(profile.bankDetails.accountHolderName);
+      if (profile.bankDetails.accountHolderName) {
+        setName(profile.bankDetails.accountHolderName);
+      }
+      setBankVerifyStep('review');
+      setBankConfirmed(true);
+      setReusedVerifiedBank(true);
+      setBankVerifyResult(null);
     }
   };
 
@@ -77,15 +140,21 @@ export default function RedeemForm({
   ) => {
     if (field === 'accountNumber') {
       setAccountNumber(value.replace(/[^\d\s]/g, ''));
-    } else if (field === 'ifsc') {
-      setIfsc(value.toUpperCase());
-    } else {
-      setBankName(value);
+      if (bankVerifyResult || bankConfirmed || reusedVerifiedBank) {
+        clearBankVerification();
+      }
+      return;
     }
 
-    if (bankVerifyResult || bankConfirmed) {
-      resetBankVerification();
+    if (field === 'ifsc') {
+      setIfsc(value.toUpperCase());
+      if (bankVerifyResult || bankConfirmed || reusedVerifiedBank) {
+        clearBankVerification();
+      }
+      return;
     }
+
+    setBankName(value);
   };
 
   const handleVerifyBank = async () => {
@@ -107,6 +176,9 @@ export default function RedeemForm({
         throw new Error('Bank verification did not return complete details');
       }
       setBankVerifyResult(result);
+      setAccountHolderName(result.accountHolderName);
+      setName(result.accountHolderName);
+      setReusedVerifiedBank(false);
       setBankVerifyStep('review');
     } catch (err) {
       setError(err instanceof Error ? err.message : 'Failed to verify bank account');
@@ -120,6 +192,15 @@ export default function RedeemForm({
     setBankConfirmed(true);
     setError('');
   };
+
+  const isReusingVerifiedBank =
+    reusedVerifiedBank &&
+    bankConfirmed &&
+    Boolean(accountHolderName) &&
+    Boolean(profile?.bankDetails?.verified) &&
+    normalizeAccount(accountNumber) ===
+      normalizeAccount(profile?.bankDetails?.accountNumber ?? '') &&
+    normalizeIfsc(ifsc) === normalizeIfsc(profile?.bankDetails?.ifsc ?? '');
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
@@ -135,17 +216,17 @@ export default function RedeemForm({
         setError('Please enter a valid UPI ID (e.g. name@paytm)');
         return;
       }
-    } else {
-      if (!bankConfirmed || !bankVerifyResult) {
-        setError('Please verify and confirm your bank account before claiming');
-        return;
-      }
+    } else if (isReusingVerifiedBank) {
+      // Skip verifyBankAccount — redeem with bank fields only.
+    } else if (!bankConfirmed || !bankVerifyResult) {
+      setError('Please verify and confirm your bank account before claiming');
+      return;
     }
 
     setLoading(true);
     const idempotencyKey = getOrCreateIdempotencyKey();
-    const normalizedAccountNumber = accountNumber.replace(/\s/g, '');
-    const normalizedIfsc = ifsc.trim().toUpperCase();
+    const normalizedAccountNumber = normalizeAccount(accountNumber);
+    const normalizedIfsc = normalizeIfsc(ifsc);
 
     const payload =
       payoutMethod === 'upi'
@@ -155,17 +236,27 @@ export default function RedeemForm({
             upi_vpa: upiVpa.trim(),
             idempotency_key: idempotencyKey,
           }
-        : {
-            code,
-            name: name.trim(),
-            account_holder_name: bankVerifyResult!.accountHolderName,
-            account_number: normalizedAccountNumber,
-            ifsc: normalizedIfsc,
-            bank_name: bankName.trim() || undefined,
-            kyc_verification_details: bankVerifyResult!
-              .kycVerificationDetails as KycVerificationDetails,
-            idempotency_key: idempotencyKey,
-          };
+        : isReusingVerifiedBank
+          ? {
+              code,
+              name: name.trim(),
+              account_holder_name: accountHolderName,
+              account_number: normalizedAccountNumber,
+              ifsc: normalizedIfsc,
+              bank_name: bankName.trim() || undefined,
+              idempotency_key: idempotencyKey,
+            }
+          : {
+              code,
+              name: name.trim(),
+              account_holder_name: bankVerifyResult!.accountHolderName,
+              account_number: normalizedAccountNumber,
+              ifsc: normalizedIfsc,
+              bank_name: bankName.trim() || undefined,
+              kyc_verification_details: bankVerifyResult!
+                .kycVerificationDetails as KycVerificationDetails,
+              idempotency_key: idempotencyKey,
+            };
 
     const payout: PayoutDetails =
       payoutMethod === 'upi'
@@ -180,6 +271,7 @@ export default function RedeemForm({
     try {
       const result = await redeemCoupon(payload);
       clearIdempotencyKey();
+      void refreshProfile();
       onSuccess(result, payout);
     } catch (err) {
       setError(err instanceof Error ? err.message : 'Failed to redeem coupon');
@@ -189,7 +281,15 @@ export default function RedeemForm({
   };
 
   const canSubmitBank =
-    payoutMethod === 'bank' ? bankConfirmed && Boolean(bankVerifyResult) : true;
+    payoutMethod === 'bank'
+      ? isReusingVerifiedBank || (bankConfirmed && Boolean(bankVerifyResult))
+      : true;
+
+  const showBankReview =
+    bankVerifyStep === 'review' && (Boolean(bankVerifyResult) || reusedVerifiedBank);
+
+  const displayHolderName =
+    bankVerifyResult?.accountHolderName || accountHolderName || '—';
 
   return (
     <div className={styles.redeemFlow}>
@@ -243,7 +343,9 @@ export default function RedeemForm({
             <p className={styles.claimNoticeTitle}>Coupon verified successfully</p>
             <p className={styles.claimNoticeText}>
               {payoutMethod === 'bank'
-                ? 'Bank account is recommended for automatic payout. Enter and verify your account before claiming.'
+                ? isReusingVerifiedBank
+                  ? 'Using your saved verified bank account. You can claim without verifying again.'
+                  : 'Bank account is recommended for automatic payout. Enter and verify your account before claiming.'
                 : 'UPI payouts are processed manually and may take longer. For automatic settlement, switch to bank account.'}
             </p>
           </div>
@@ -297,9 +399,9 @@ export default function RedeemForm({
 
           {payoutMethod === 'upi' ? (
             <div className={styles.formGroup}>
-              <label htmlFor="redeem-upi">UPI ID *</label>
+              <label htmlFor="redeem-edit-upi">UPI ID *</label>
               <input
-                id="redeem-upi"
+                id="redeem-edit-upi"
                 type="text"
                 value={upiVpa}
                 onChange={(e) => setUpiVpa(e.target.value)}
@@ -380,24 +482,30 @@ export default function RedeemForm({
                 </>
               )}
 
-              {bankVerifyStep === 'review' && bankVerifyResult && (
+              {showBankReview && (
                 <div className={styles.bankVerifyCard}>
                   <div className={styles.bankVerifyHeader}>
                     <Building2 size={20} strokeWidth={2} aria-hidden="true" />
                     <span>Bank account verified</span>
+                    {(reusedVerifiedBank || bankConfirmed) && (
+                      <span className={styles.verifiedBadge}>
+                        <ShieldCheck size={12} strokeWidth={2.5} aria-hidden="true" />
+                        Verified
+                      </span>
+                    )}
                   </div>
                   <dl className={styles.bankVerifyDetails}>
                     <div>
                       <dt>Account holder</dt>
-                      <dd>{bankVerifyResult.accountHolderName}</dd>
+                      <dd>{displayHolderName}</dd>
                     </div>
                     <div>
                       <dt>Account number</dt>
-                      <dd>{accountNumber.replace(/\s/g, '')}</dd>
+                      <dd>{normalizeAccount(accountNumber)}</dd>
                     </div>
                     <div>
                       <dt>IFSC</dt>
-                      <dd>{ifsc.trim().toUpperCase()}</dd>
+                      <dd>{normalizeIfsc(ifsc)}</dd>
                     </div>
                     {bankName.trim() && (
                       <div>
@@ -406,12 +514,12 @@ export default function RedeemForm({
                       </div>
                     )}
                   </dl>
-                  {!bankConfirmed ? (
+                  {!bankConfirmed && bankVerifyResult ? (
                     <div className={styles.bankVerifyActions}>
                       <button
                         type="button"
                         className={styles.textButton}
-                        onClick={resetBankVerification}
+                        onClick={clearBankVerification}
                       >
                         Change account
                       </button>
@@ -420,9 +528,22 @@ export default function RedeemForm({
                       </PrimaryButton>
                     </div>
                   ) : (
-                    <div className={styles.bankConfirmedBanner} role="status">
-                      <CheckCircle2 size={18} strokeWidth={2} aria-hidden="true" />
-                      <span>Bank account confirmed — you can claim your reward below.</span>
+                    <div className={styles.bankVerifyActions}>
+                      <div className={styles.bankConfirmedBanner} role="status">
+                        <CheckCircle2 size={18} strokeWidth={2} aria-hidden="true" />
+                        <span>
+                          {reusedVerifiedBank
+                            ? 'Saved verified bank — ready to claim.'
+                            : 'Bank account confirmed — you can claim your reward below.'}
+                        </span>
+                      </div>
+                      <button
+                        type="button"
+                        className={styles.textButton}
+                        onClick={clearBankVerification}
+                      >
+                        Change account
+                      </button>
                     </div>
                   )}
                 </div>
@@ -435,7 +556,7 @@ export default function RedeemForm({
           <PrimaryButton
             type="submit"
             className={styles.fullWidth}
-            disabled={loading || !canSubmitBank}
+            disabled={loading || !canSubmitBank || (!prefilled && profileLoading)}
           >
             {loading ? 'Submitting…' : 'Claim Reward'}
           </PrimaryButton>
